@@ -23,6 +23,7 @@
 #include "crypto/desrfb.h"
 #include "crypto/xts.h"
 #include "cipherpriv.h"
+#include "crypto/sm4.h"
 
 typedef struct QCryptoCipherBuiltinAESContext QCryptoCipherBuiltinAESContext;
 struct QCryptoCipherBuiltinAESContext {
@@ -40,12 +41,23 @@ struct QCryptoCipherBuiltinDESRFB {
     uint8_t *key;
     size_t nkey;
 };
+typedef struct QCryptoCipherBuiltinSM4Context QCryptoCipherBuiltinSM4Context;
+struct QCryptoCipherBuiltinSM4Context {
+    SM4_KEY enc;
+    SM4_KEY dec;
+};
+typedef struct QCryptoCipherBuiltinSM4 QCryptoCipherBuiltinSM4;
+struct QCryptoCipherBuiltinSM4 {
+    QCryptoCipherBuiltinSM4Context key;
+    uint8_t iv[SM4_BLOCK_SIZE];
+};
 
 typedef struct QCryptoCipherBuiltin QCryptoCipherBuiltin;
 struct QCryptoCipherBuiltin {
     union {
         QCryptoCipherBuiltinAES aes;
         QCryptoCipherBuiltinDESRFB desrfb;
+        QCryptoCipherBuiltinSM4 sm4;
     } state;
     size_t blocksize;
     void (*free)(QCryptoCipher *cipher);
@@ -234,8 +246,6 @@ static int qcrypto_cipher_setiv_aes(QCryptoCipher *cipher,
 }
 
 
-
-
 static QCryptoCipherBuiltin *
 qcrypto_cipher_init_aes(QCryptoCipherMode mode,
                         const uint8_t *key, size_t nkey,
@@ -399,6 +409,123 @@ qcrypto_cipher_init_des_rfb(QCryptoCipherMode mode,
 }
 
 
+static void qcrypto_cipher_free_sm4(QCryptoCipher *cipher)
+{
+    QCryptoCipherBuiltin *ctxt = cipher->opaque;
+
+    g_free(ctxt);
+    cipher->opaque = NULL;
+}
+
+
+static int qcrypto_cipher_encrypt_sm4(QCryptoCipher *cipher,
+                                      const void *in,
+                                      void *out,
+                                      size_t len,
+                                      Error **errp)
+{
+    QCryptoCipherBuiltin *ctxt = cipher->opaque;
+
+    switch (cipher->mode) {
+    case QCRYPTO_CIPHER_MODE_ECB:
+        sm4_ecb_crypt(&ctxt->state.sm4.key.dec,
+                                       in, out, len);
+        break;
+    case QCRYPTO_CIPHER_MODE_CBC:
+        sm4_cbc_encrypt(&ctxt->state.sm4.key.dec,
+                        ctxt->state.sm4.iv,
+                        in, out, len);
+        break;
+    default:
+        g_assert_not_reached();
+    }
+
+    return 0;
+}
+
+
+static int qcrypto_cipher_decrypt_sm4(QCryptoCipher *cipher,
+                                      const void *in,
+                                      void *out,
+                                      size_t len,
+                                      Error **errp)
+{
+    QCryptoCipherBuiltin *ctxt = cipher->opaque;
+
+    switch (cipher->mode) {
+    case QCRYPTO_CIPHER_MODE_ECB:
+        sm4_ecb_crypt(&ctxt->state.sm4.key.dec,
+                                       in, out, len);
+        break;
+    case QCRYPTO_CIPHER_MODE_CBC:
+        sm4_cbc_decrypt(&ctxt->state.sm4.key.dec,
+                        ctxt->state.sm4.iv,
+                        in, out, len);
+        break;
+    default:
+        g_assert_not_reached();
+    }
+
+    return 0;
+}
+
+static int qcrypto_cipher_setiv_sm4(QCryptoCipher *cipher,
+                                     const uint8_t *iv, size_t niv,
+                                     Error **errp)
+{
+    QCryptoCipherBuiltin *ctxt = cipher->opaque;
+    if (niv != SM4_BLOCK_SIZE) {
+        error_setg(errp, "IV must be %d bytes not %zu",
+                   SM4_BLOCK_SIZE, niv);
+        return -1;
+    }
+
+    memcpy(ctxt->state.sm4.iv, iv, SM4_BLOCK_SIZE);
+
+    return 0;
+}
+
+static QCryptoCipherBuiltin *
+qcrypto_cipher_init_sm4(QCryptoCipherMode mode,
+                        const uint8_t *key, size_t nkey,
+                        Error **errp)
+{
+    QCryptoCipherBuiltin *ctxt;
+
+    if (mode != QCRYPTO_CIPHER_MODE_CBC &&
+        mode != QCRYPTO_CIPHER_MODE_ECB) {
+        error_setg(errp, "Unsupported cipher mode %s",
+                   QCryptoCipherMode_str(mode));
+        return NULL;
+    }
+
+    ctxt = g_new0(QCryptoCipherBuiltin, 1);
+
+
+    if (sm4_set_encrypt_key(key, &ctxt->state.sm4.key.enc) != 0) {
+        error_setg(errp, "Failed to set encryption key");
+        goto error;
+    }
+
+    if (sm4_set_decrypt_key(key, &ctxt->state.sm4.key.dec) != 0) {
+        error_setg(errp, "Failed to set decryption key");
+        goto error;
+    }
+
+    ctxt->blocksize = SM4_BLOCK_SIZE;
+    ctxt->free = qcrypto_cipher_free_sm4;
+    ctxt->setiv = qcrypto_cipher_setiv_sm4;
+    ctxt->encrypt = qcrypto_cipher_encrypt_sm4;
+    ctxt->decrypt = qcrypto_cipher_decrypt_sm4;
+
+    return ctxt;
+
+ error:
+    g_free(ctxt);
+    return NULL;
+}
+
+
 bool qcrypto_cipher_supports(QCryptoCipherAlgorithm alg,
                              QCryptoCipherMode mode)
 {
@@ -407,6 +534,7 @@ bool qcrypto_cipher_supports(QCryptoCipherAlgorithm alg,
     case QCRYPTO_CIPHER_ALG_AES_128:
     case QCRYPTO_CIPHER_ALG_AES_192:
     case QCRYPTO_CIPHER_ALG_AES_256:
+    case QCRYPTO_CIPHER_ALG_SM4_128:
         break;
     default:
         return false;
@@ -456,6 +584,9 @@ static QCryptoCipherBuiltin *qcrypto_cipher_ctx_new(QCryptoCipherAlgorithm alg,
     case QCRYPTO_CIPHER_ALG_AES_192:
     case QCRYPTO_CIPHER_ALG_AES_256:
         ctxt = qcrypto_cipher_init_aes(mode, key, nkey, errp);
+        break;
+    case QCRYPTO_CIPHER_ALG_SM4_128:
+        ctxt = qcrypto_cipher_init_sm4(mode, key, nkey, errp);
         break;
     default:
         error_setg(errp,
