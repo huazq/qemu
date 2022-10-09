@@ -25,6 +25,7 @@
 #include <nettle/md5.h>
 #include <nettle/sha.h>
 #include <nettle/ripemd160.h>
+#include <nettle/sm3.h>
 
 typedef void (*qcrypto_nettle_init)(void *ctx);
 typedef void (*qcrypto_nettle_write)(void *ctx,
@@ -42,6 +43,7 @@ union qcrypto_hash_ctx {
     struct sha384_ctx sha384;
     struct sha512_ctx sha512;
     struct ripemd160_ctx ripemd160;
+    struct sm3_ctx sm3;
 };
 
 struct qcrypto_hash_alg {
@@ -91,6 +93,12 @@ struct qcrypto_hash_alg {
         .write = (qcrypto_nettle_write)ripemd160_update,
         .result = (qcrypto_nettle_result)ripemd160_digest,
         .len = RIPEMD160_DIGEST_SIZE,
+    },
+    [QCRYPTO_HASH_ALG_SM3] = {
+        .init = (qcrypto_nettle_init)sm3_init,
+        .write = (qcrypto_nettle_write)sm3_update,
+        .result = (qcrypto_nettle_result)sm3_digest,
+        .len = SM3_DIGEST_SIZE,
     },
 };
 

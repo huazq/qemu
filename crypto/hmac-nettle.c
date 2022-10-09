@@ -35,6 +35,7 @@ struct QCryptoHmacNettle {
         struct hmac_sha256_ctx sha256_ctx; /* equals hmac_sha224_ctx */
         struct hmac_sha512_ctx sha512_ctx; /* equals hmac_sha384_ctx */
         struct hmac_ripemd160_ctx ripemd160_ctx;
+        struct hmac_sm3_ctx sm3_ctx;
     } u;
 };
 
@@ -85,6 +86,12 @@ struct qcrypto_nettle_hmac_alg {
         .update = (qcrypto_nettle_hmac_update)hmac_ripemd160_update,
         .digest = (qcrypto_nettle_hmac_digest)hmac_ripemd160_digest,
         .len = RIPEMD160_DIGEST_SIZE,
+    },
+    [QCRYPTO_HASH_ALG_SM3] = {
+        .setkey = (qcrypto_nettle_hmac_setkey)hmac_sm3_set_key,
+        .update = (qcrypto_nettle_hmac_update)hmac_sm3_update,
+        .digest = (qcrypto_nettle_hmac_digest)hmac_sm3_digest,
+        .len = SM3_DIGEST_SIZE,
     },
 };
 

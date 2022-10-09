@@ -30,6 +30,7 @@
 #include <nettle/serpent.h>
 #include <nettle/twofish.h>
 #include <nettle/ctr.h>
+#include <nettle/sm4.h>
 
 typedef void (*QCryptoCipherNettleFuncWrapper)(const void *ctx,
                                                size_t length,
@@ -52,6 +53,11 @@ typedef struct QCryptoNettleAES {
     struct aes_ctx enc;
     struct aes_ctx dec;
 } QCryptoNettleAES;
+
+typedef struct QCryptoNettleSM4 {
+    struct sm4_ctx enc;
+    struct sm4_ctx dec;
+} QCryptoNettleSM4;
 
 static void aes_encrypt_native(cipher_ctx_t ctx, cipher_length_t length,
                                uint8_t *dst, const uint8_t *src)
@@ -125,6 +131,20 @@ static void twofish_decrypt_native(cipher_ctx_t ctx, cipher_length_t length,
                                    uint8_t *dst, const uint8_t *src)
 {
     twofish_decrypt(ctx, length, dst, src);
+}
+
+static void sm4_encrypt_native(cipher_ctx_t ctx, cipher_length_t length,
+                               uint8_t *dst, const uint8_t *src)
+{
+    const QCryptoNettleSM4 *sm4ctx = ctx;
+    sm4_crypt(&sm4ctx->enc, length, dst, src);
+}
+
+static void sm4_decrypt_native(cipher_ctx_t ctx, cipher_length_t length,
+                               uint8_t *dst, const uint8_t *src)
+{
+    const QCryptoNettleSM4 *sm4ctx = ctx;
+    sm4_crypt(&sm4ctx->dec, length, dst, src);
 }
 
 static void aes_encrypt_wrapper(const void *ctx, size_t length,
@@ -201,6 +221,20 @@ static void twofish_decrypt_wrapper(const void *ctx, size_t length,
     twofish_decrypt(ctx, length, dst, src);
 }
 
+static void sm4_encrypt_wrapper(const void *ctx, size_t length,
+                                uint8_t *dst, const uint8_t *src)
+{
+    const QCryptoNettleSM4 *sm4ctx = ctx;
+    sm4_crypt(&sm4ctx->enc, length, dst, src);
+}
+
+static void sm4_decrypt_wrapper(const void *ctx, size_t length,
+                                uint8_t *dst, const uint8_t *src)
+{
+    const QCryptoNettleSM4 *sm4ctx = ctx;
+    sm4_crypt(&sm4ctx->dec, length, dst, src);
+}
+
 typedef struct QCryptoCipherNettle QCryptoCipherNettle;
 struct QCryptoCipherNettle {
     /* Primary cipher context for all modes */
@@ -233,6 +267,7 @@ bool qcrypto_cipher_supports(QCryptoCipherAlgorithm alg,
     case QCRYPTO_CIPHER_ALG_TWOFISH_128:
     case QCRYPTO_CIPHER_ALG_TWOFISH_192:
     case QCRYPTO_CIPHER_ALG_TWOFISH_256:
+    case QCRYPTO_CIPHER_ALG_SM4_128:
         break;
     default:
         return false;
@@ -416,6 +451,20 @@ static QCryptoCipherNettle *qcrypto_cipher_ctx_new(QCryptoCipherAlgorithm alg,
         ctx->alg_decrypt_wrapper = twofish_decrypt_wrapper;
 
         ctx->blocksize = TWOFISH_BLOCK_SIZE;
+        break;
+
+    case QCRYPTO_CIPHER_ALG_SM4_128:
+        ctx->ctx = g_new0(QCryptoNettleSM4, 1);
+
+        sm4_set_encrypt_key(&((QCryptoNettleSM4 *)ctx->ctx)->enc, key);
+        sm4_set_decrypt_key(&((QCryptoNettleSM4 *)ctx->ctx)->dec, key);
+
+        ctx->alg_encrypt_native = sm4_encrypt_native;
+        ctx->alg_decrypt_native = sm4_decrypt_native;
+        ctx->alg_encrypt_wrapper = sm4_encrypt_wrapper;
+        ctx->alg_decrypt_wrapper = sm4_decrypt_wrapper;
+
+        ctx->blocksize = SM4_BLOCK_SIZE;
         break;
 
     default:

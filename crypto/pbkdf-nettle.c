@@ -34,6 +34,7 @@ bool qcrypto_pbkdf2_supports(QCryptoHashAlgorithm hash)
     case QCRYPTO_HASH_ALG_SHA384:
     case QCRYPTO_HASH_ALG_SHA512:
     case QCRYPTO_HASH_ALG_RIPEMD160:
+    case QCRYPTO_HASH_ALG_SM3:
         return true;
     default:
         return false;
@@ -55,6 +56,7 @@ int qcrypto_pbkdf2(QCryptoHashAlgorithm hash,
         struct hmac_sha384_ctx sha384;
         struct hmac_sha512_ctx sha512;
         struct hmac_ripemd160_ctx ripemd160;
+        struct hmac_sm3_ctx sm3;
     } ctx;
 
     if (iterations > UINT_MAX) {
@@ -105,6 +107,12 @@ int qcrypto_pbkdf2(QCryptoHashAlgorithm hash,
         hmac_ripemd160_set_key(&ctx.ripemd160, nkey, key);
         PBKDF2(&ctx.ripemd160, hmac_ripemd160_update, hmac_ripemd160_digest,
                RIPEMD160_DIGEST_SIZE, iterations, nsalt, salt, nout, out);
+        break;
+
+    case QCRYPTO_HASH_ALG_SM3:
+        hmac_sm3_set_key(&ctx.sm3, nkey, key);
+        PBKDF2(&ctx.sm3, hmac_sm3_update, hmac_sm3_digest,
+               SM3_DIGEST_SIZE, iterations, nsalt, salt, nout, out);
         break;
 
     default:

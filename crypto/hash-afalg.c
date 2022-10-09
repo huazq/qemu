@@ -50,6 +50,9 @@ qcrypto_afalg_hash_format_name(QCryptoHashAlgorithm alg,
     case QCRYPTO_HASH_ALG_RIPEMD160:
         alg_name = "rmd160";
         break;
+    case QCRYPTO_HASH_ALG_SM3:
+        alg_name = "sm3";
+        break;
 
     default:
         error_setg(errp, "Unsupported hash algorithm %d", alg);

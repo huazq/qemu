@@ -122,12 +122,19 @@ qcrypto_block_luks_cipher_size_map_twofish[] = {
     { 0, 0 },
 };
 
+static const QCryptoBlockLUKSCipherSizeMap
+qcrypto_block_luks_cipher_size_map_sm4[] = {
+    { 16, QCRYPTO_CIPHER_ALG_SM4_128 },
+    { 0, 0 },
+};
+
 static const QCryptoBlockLUKSCipherNameMap
 qcrypto_block_luks_cipher_name_map[] = {
     { "aes", qcrypto_block_luks_cipher_size_map_aes },
     { "cast5", qcrypto_block_luks_cipher_size_map_cast5 },
     { "serpent", qcrypto_block_luks_cipher_size_map_serpent },
     { "twofish", qcrypto_block_luks_cipher_size_map_twofish },
+    { "sm4", qcrypto_block_luks_cipher_size_map_sm4 },
 };
 
 
@@ -384,6 +391,16 @@ qcrypto_block_luks_essiv_cipher(QCryptoCipherAlgorithm cipher,
         } else if (digestlen == qcrypto_cipher_get_key_len(
                        QCRYPTO_CIPHER_ALG_TWOFISH_256)) {
             return QCRYPTO_CIPHER_ALG_TWOFISH_256;
+        } else {
+            error_setg(errp, "No Twofish cipher with key size %zu available",
+                       digestlen);
+            return 0;
+        }
+        break;
+    case QCRYPTO_CIPHER_ALG_SM4_128:
+        if (digestlen == qcrypto_cipher_get_key_len(
+                QCRYPTO_CIPHER_ALG_SM4_128)) {
+            return QCRYPTO_CIPHER_ALG_SM4_128;
         } else {
             error_setg(errp, "No Twofish cipher with key size %zu available",
                        digestlen);
